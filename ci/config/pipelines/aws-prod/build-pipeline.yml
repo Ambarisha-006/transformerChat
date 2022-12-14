@@ -1,0 +1,458 @@
+anchors:
+  <<: &pact_params
+    PACTBROKER_URL: ((pactbroker-url))
+    PACTBROKER_USERNAME: ((pactbroker-username))
+    PACTBROKER_PASSWORD: ((pactbroker-password))
+
+#Consumer need to add only for UT job
+  <<: &pact_consumer_params
+    IS_PACT_PUBLISH: 0
+    PACT_PUBLISH_FILE: transformer-api-service/target/pacts/Transformer-Retrieval.json
+
+#Provider need to add for PR check jobs and UT
+  <<: &pact_provider_params
+    IS_PACT_PROVIDER: 0
+    PACT_CONFIG_FILE: ""
+
+groups:
+- jobs:
+  - set_pipeline
+  - build-package-rc
+  - unit-and-component-tests
+  - build-package-release
+  - pull-request-rc
+  - pull-request-release
+  name: all
+
+- jobs:
+  - build-package-rc
+  - unit-and-component-tests
+  - pull-request-rc
+  name: rc
+
+- jobs:
+  - build-package-release
+  - pull-request-release
+  name: release
+
+resource_types:
+- name: artifactory-resource
+  source:
+    repository: smarshops/artifactory-resource
+    tag: latest
+  type: registry-image
+
+- name: pull-request
+  source:
+    repository: teliaoss/github-pr-resource
+  type: registry-image
+
+- name: slack-notification
+  source:
+    repository: cfcommunity/slack-notification-resource
+    tag: latest
+  type: registry-image
+
+resources:
+- name: app-image
+  source:
+    repository: smarshops/cc-task-image
+    tag: latest
+  type: registry-image
+
+- name: cc-integration-test-image
+  source:
+    repository: smarshops/cc-integration-test-image
+    tag: latest
+  type: registry-image
+
+- name: test-results-upload-dev
+  source:
+    access_key_id: ((s3-access-key-id))
+    bucket: smarsh-connected-capture-dev
+    regexp: test-results/(.*)-LATEST.zip
+    region_name: us-east-1
+    secret_access_key: ((s3-secret-access-key))
+  type: s3
+
+- name: artifactory-release
+  source:
+    build_name: transformer-api-build-comm
+    password: ((artifactory-password))
+    uri: https://smarsh.jfrog.io/smarsh
+    username: ((artifactory-username))
+    repo_name: cc-maven-release-local
+  type: artifactory-resource
+
+- name: artifactory-rc
+  source:
+    build_name: transformer-api-build-comm
+    password: ((artifactory-password))
+    uri: https://smarsh.jfrog.io/smarsh
+    username: ((artifactory-username))
+    repo_name: cc-maven-rc-local
+  type: artifactory-resource
+
+- name: git-app-rc
+  source:
+    branch: main
+    ignore_paths:
+    - '*-database/*'
+    - manifest_db.yml
+    - version
+    - ci/config/pipielines/*
+    - ci/lib/*
+    - ci/tasks/*
+    - .github/*
+    - README.md
+    private_key: ((git-private-key))
+    uri: git@github.com:Smarsh/transformerApi.git
+  type: git
+
+- name: git-set-pipeline
+  type: git
+  source:
+    branch: main
+    paths:
+    - ci/*
+    private_key: ((git-private-key))
+    uri: git@github.com:Smarsh/transformerApi.git
+
+- name: git-app-release
+  source:
+    branch: release
+    ignore_paths:
+    - '*-database/*'
+    - manifest_db.yml
+    - version
+    - ci/config/pipielines/*
+    - ci/lib/*
+    - ci/tasks/*
+    - .github/*
+    - README.md
+    private_key: ((git-private-key))
+    uri: git@github.com:Smarsh/transformerApi.git
+  type: git
+
+- name: git-app-ccdelivery
+  source:
+    branch: master
+    paths:
+    - ci/*
+    private_key: ((git-private-key))
+    uri: git@github.com:Smarsh/ccdelivery.git
+  type: git
+
+- name: pull-request
+  type: pull-request
+  source:
+    repository: smarsh/transformerApi
+    access_token: ((github-access-token))
+    base_branch: main
+    ignore_paths:
+    - version
+    - ci/config/pipelines/*
+    - ci/lib/*
+    - ci/tasks/*
+    - .github/*
+    - README.md
+
+- name: pull-request-release
+  type: pull-request
+  source:
+    repository: smarsh/transformerApi
+    access_token: ((github-access-token))
+    base_branch: release
+    ignore_paths:
+    - version
+    - ci/config/pipelines/*
+    - ci/lib/*
+    - ci/tasks/*
+    - .github/*
+    - README.md
+
+- name: slack-alert
+  source:
+    url: ((slack-webhook-url))
+  type: slack-notification
+
+- name: version
+  source:
+    branch: version
+    driver: git
+    file: version
+    private_key: ((git-private-key))
+    uri: git@github.com:Smarsh/transformerApi.git
+  type: semver
+
+jobs:
+- name: set_pipeline
+  serial: true
+  plan:
+  - get: git-set-pipeline
+    trigger: true
+  - set_pipeline: transformerapi-build
+    file: git-set-pipeline/ci/config/pipelines/aws-prod/build-pipeline.yml
+
+- name: pull-request-rc
+  plan:
+  - in_parallel:
+      steps:
+      - get: pull-request
+        trigger: true
+        version: every
+      - get: git-app
+        version: every
+        resource: pull-request
+      - get: app-image
+      - get: git-app-ccdelivery
+      - get: cc-integration-test-image
+  - put: pull-request
+    params:
+      path: pull-request
+      status: pending
+  - task: run-pr-integration-tests
+    privileged: true
+    file: git-app-ccdelivery/ci/tasks/run-pr-checks-in-container/task.yml
+    image: cc-integration-test-image
+    params:
+      DOCKERHUB_USERNAME: ((docker-hub-username))
+      DOCKERHUB_PASSWORD: ((docker-hub-password))
+      TEST_PROFILES: ""
+      UPLOAD_TO_S3: false
+      APP_FOLDER: tsfa
+      BRANCH_RC_RELEASE: rc
+    on_failure:
+      put: pull-request
+      params:
+        path: pull-request
+        status: failure
+  - put: pull-request
+    params:
+      path: pull-request
+      status: success
+
+- name: pull-request-release
+  plan:
+  - in_parallel:
+      steps:
+      - get: pull-request-release
+        trigger: true
+        version: every
+      - get: git-app
+        version: every
+        resource: pull-request-release
+      - get: app-image
+      - get: git-app-ccdelivery
+      - get: cc-integration-test-image
+  - put: pull-request-release
+    params:
+      path: pull-request-release
+      status: pending
+  - task: run-pr-integration-tests
+    privileged: true
+    file: git-app-ccdelivery/ci/tasks/run-pr-checks-in-container/task.yml
+    image: cc-integration-test-image
+    params:
+      DOCKERHUB_USERNAME: ((docker-hub-username))
+      DOCKERHUB_PASSWORD: ((docker-hub-password))
+      TEST_PROFILES: ""
+      UPLOAD_TO_S3: false
+      APP_FOLDER: tsfa
+      BRANCH_RC_RELEASE: release
+    on_failure:
+      put: pull-request-release
+      params:
+        path: pull-request-release
+        status: failure
+  - put: pull-request-release
+    params:
+      path: pull-request-release
+      status: success
+
+- name: unit-and-component-tests
+  plan:
+  - in_parallel:
+      steps:
+      - get: git-app
+        resource: git-app-rc
+        trigger: true
+      - get: app-image
+      - get: cc-integration-test-image
+      - get: git-app-ccdelivery
+  - task: run-tests
+    privileged: true
+    file: git-app-ccdelivery/ci/tasks/run-any-tests-in-container/task.yml
+    image: cc-integration-test-image
+    params:
+      DOCKERHUB_USERNAME: ((docker-hub-username))
+      DOCKERHUB_PASSWORD: ((docker-hub-password))
+      BUILD_PROJECT_BEFORE_TESTS: false
+      TEST_PROFILES: ""
+      UPLOAD_TO_S3: true
+      APP_FOLDER: tsfa
+      <<: *pact_params
+      <<: *pact_consumer_params
+      <<: *pact_provider_params
+    on_success:
+      put: test-results-upload-dev
+      params:
+        file: s3-folder-out/*-LATEST.zip
+    on_failure:
+      put: test-results-upload-dev
+      params:
+        file: s3-folder-out/*-LATEST.zip
+  - task: sonar-full-reposcan
+    file: git-app-ccdelivery/ci/tasks/sonar-full-reposcan/task.yml
+    image: app-image
+    on_failure:
+      params:
+        always_notify: true
+        channel: '#connected_capture-ops'
+        icon_emoji: ':exclamation:'
+        text: |
+          Tests for app: tsfa failed
+          More details: https://app-concourse.us-west-2.aws.smarsh.cloud/builds/$BUILD_ID
+      put: slack-alert
+    params:
+      SONAR_PROJECT_KEY: tsfa
+      SONAR_PROJECT_NAME: connected-capture
+      SONAR_TOKEN: ((sonar-token-latest))
+      SONAR_URL: ((sonar-url))
+      sonar_latest: 1
+      sonar_quality_gate: 0
+    
+- name: build-package-rc
+  build_log_retention:
+    days: 7
+    builds: 15
+    minimum_succeeded_builds: 2
+  max_in_flight: 1
+  plan:
+  - in_parallel:
+      steps:
+      - get: git-app
+        passed:
+        - unit-and-component-tests
+        trigger: true
+        resource: git-app-rc
+      - get: version
+        params:
+          bump: patch
+      - get: app-image
+      - get: git-app-ccdelivery
+  - task: run-build-commercial
+    file: git-app-ccdelivery/ci/tasks/run-build-plugin-inclusion-aclzip/task.yml
+    image: app-image
+    on_failure:
+      params:
+        always_notify: true
+        channel: '#connected_capture-ops'
+        icon_emoji: ':exclamation:'
+        text: |
+          Build package for app: tsfa failed
+          More details: https://app-concourse.us-west-2.aws.smarsh.cloud/builds/$BUILD_ID
+      put: slack-alert
+    on_success:
+      params:
+        file: version/version
+      put: version
+    params:
+      rc_flag: yes
+      plugin_name: slack-transformer-plugin
+      artifactory_directory: transformer-api
+      artifactory_path: com/smarsh
+      artifactory_sub_directory: transformer-api
+      artifactory_username: ((artifactory-username))
+      artifactory_password: ((artifactory-password))
+      build_classifier_profile: commercial
+  - task: run-build-federal
+    file: git-app-ccdelivery/ci/tasks/run-build-federal/task.yml
+    image: app-image
+    on_failure:
+      params:
+        always_notify: true
+        channel: '#connected_capture-ops'
+        icon_emoji: ':exclamation:'
+        text: |
+          Build package for app: tsfa failed
+          More details: https://app-concourse.us-west-2.aws.smarsh.cloud/builds/$BUILD_ID
+      put: slack-alert
+    on_success:
+      params:
+        build_number: ${BUILD_ID}
+        build_uri: https://app-concourse.us-west-2.aws.smarsh.cloud/builds/${BUILD_ID}
+        debug: true
+        folder: build-package-output
+        include:
+        - '**/*.jar'
+        - '**/*.war'
+        - '**/*.pom'
+        - '**/*.zip'
+        repo: cc-maven-rc-local/
+        build_properties: build.properties
+      put: artifactory-rc
+    params:
+      rc_flag: yes
+      artifactory_directory: transformer-api
+      artifactory_path: com/smarsh
+      artifactory_sub_directory: transformer-api
+      build_classifier_profile: federal
+      build_isolation_module: transformer-api-service
+  serial_groups:
+  - buildpackage
+
+- name: build-package-release
+  max_in_flight: 1
+  plan:
+  - in_parallel:
+      steps:
+      - get: git-app
+        trigger: true
+        resource: git-app-release
+      - get: version
+        params:
+          bump: patch
+      - get: app-image
+      - get: git-app-ccdelivery
+  - task: run-build-release
+    file: git-app-ccdelivery/ci/tasks/run-build-acl-zip/task.yml
+    image: app-image
+    on_failure:
+      params:
+        always_notify: true
+        channel: '#connected_capture-ops'
+        icon_emoji: ':exclamation:'
+        text: |
+          Build package for app: tsfa failed
+          More details: https://app-concourse.us-west-2.aws.smarsh.cloud/builds/$BUILD_ID
+      put: slack-alert
+    on_success:
+      on_success:
+        params:
+          file: version/version
+        put: version
+      params:
+        build_number: ${BUILD_ID}
+        build_uri: https://app-concourse.us-west-2.aws.smarsh.cloud/builds/${BUILD_ID}
+        debug: true
+        folder: build-package-output
+        include:
+        - '**/*.jar'
+        - '**/*.war'
+        - '**/*.pom'
+        - '**/*.zip'
+        repo: cc-maven-release-local/
+        build_properties: build.properties
+      put: artifactory-release
+    params:
+      rc_flag: no
+      artifactory_directory: transformer-api
+      artifactory_path: com/smarsh
+      artifactory_sub_directory: transformer-api
+  serial_groups:
+  - buildpackage
+    
+
+      
+      

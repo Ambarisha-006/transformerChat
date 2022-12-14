@@ -1,0 +1,369 @@
+groups:
+- name: all
+  jobs:
+  - set-pipeline
+  - deploy-app-job-transformer-api-test
+  - deploy-app-job-transformer-api-prod
+  - hotfix-prod
+  - yucca-smoke
+  - yucca-test-regression
+
+- name: sync
+  jobs:
+  - set-pipeline
+
+- name: cc-test
+  jobs:
+  - deploy-app-job-transformer-api-test
+  - yucca-smoke
+  - yucca-test-regression
+
+- name: cc-prod
+  jobs:
+  - deploy-app-job-transformer-api-prod
+  - hotfix-prod
+
+resource_types:
+- name: artifactory-resource
+  source:
+    username: ((docker-hub-username))
+    password: ((docker-hub-password))
+    repository: smarshops/artifactory-resource
+    tag: latest
+  type: docker-image
+
+resources:
+- name: git-app
+  type: git
+  source:
+    branch: main
+    ignore_paths:
+    - version
+    - ci/config/pipielines/*
+    - ci/lib/*
+    - ci/tasks/*
+    - README.md
+    - .github/*
+    private_key: ((git-private-key))
+    uri: git@github.com:Smarsh/transformerapi.git
+
+- name: git-app-hotfix
+  type: git
+  source:
+    branch: hotfix-gov
+    private_key: ((git-private-key))
+    uri: git@github.com:Smarsh/transformerapi.git
+
+- name: git-app-pipeline
+  type: git
+  source:
+    branch: main
+    paths:
+    - ci/config/pipelines/*
+    private_key: ((git-private-key))
+    uri: git@github.com:Smarsh/transformerapi.git
+
+- name: git-app-task
+  type: git
+  source:
+    branch: main
+    private_key: ((git-private-key))
+    uri: git@github.com:Smarsh/federal-archive-pipeline-ops.git
+
+- name: yucca-source
+  type: git
+  source:
+    branch: master
+    private_key: ((git-private-key))
+    uri: git@github.com:Smarsh/yucca.git
+
+- name: app-image
+  type: docker-image
+  source:
+    password: ((docker-hub-password))
+    repository: smarshops/cc-task-image
+    tag: latest
+    username: ((docker-hub-username))
+    
+- name: task-image
+  type: docker-image
+  source:
+    password: ((docker-hub-password))
+    repository: smarshops/maven-cc
+    username: ((docker-hub-username))
+
+- name: yucca-image
+  type: docker-image
+  source:
+    password: ((docker-hub-password))
+    repository: smarshops/cc-qe-yucca
+    tag: latest
+    username: ((docker-hub-username))
+
+- name: version
+  type: semver
+  source:
+    branch: version
+    driver: git
+    file: version
+    private_key: ((git-private-key))
+    uri: git@github.com:Smarsh/transformerapi.git
+
+- name: artifactory
+  type: artifactory-resource
+  source:
+    build_name: transformer-api-build-comm
+    password: ((artifactory-password))
+    uri: https://smarsh.jfrog.io/smarsh
+    username: ((artifactory-username))
+    repo_name: cc-maven-rc-local
+
+- name: acl-upload-test
+  source:
+    access_key_id: ((aws-access-key))
+    bucket: smarsh-connected-test
+    regexp: test-acl-matrix-test/(.*)-LATEST.zip
+    region_name: us-gov-west-1
+    secret_access_key: ((aws-secret-key))
+  type: s3
+
+- name: acl-upload-prod
+  source:
+    access_key_id: ((aws-access-key))
+    bucket: smarsh-connected-prod
+    regexp: prod-acl-matrix-test/(.*)-LATEST.zip
+    region_name: us-gov-west-1
+    secret_access_key: ((aws-secret-key))
+  type: s3
+
+jobs:
+- name: set-pipeline
+  plan:
+  - get: git-app-pipeline
+    trigger: true
+  - set_pipeline: transformer-api-deploy-pipeline
+    file: git-app-pipeline/ci/config/pipelines/aws-gov/deploy-pipeline.yml
+
+- name: deploy-app-job-transformer-api-test
+  serial_groups:
+  - deployment
+  max_in_flight: 1
+  plan:
+  - in_parallel:
+    - get: git-app-task
+    - get: git-app
+    - get: version
+    - get: task-image
+    - get: app-build
+      trigger: true
+      resource: artifactory
+    - get: git-app-pipeline
+  - task: acl-upload-to-s3
+    file: git-app-task/tasks/acl-upload-to-s3/task.yml
+    params:
+      ACL_APP_PACKAGE_FILENAME: transformer-api
+      ARTIFACTORY_PATH: com/smarsh
+      BUILD_DIRECTORY: ../app-build
+      PACKAGE_EXTENSION: .zip
+    image: task-image
+    on_success:
+      put: acl-upload-test
+      params:
+        file: s3-folder-out/*-LATEST.zip
+  - task: blue-green-deploy
+    file: git-app-task/tasks/blue-green-deployment/task.yml
+    params:
+      APP_PACKAGE_FILENAME: transformer-api-service
+      ARTIFACTORY_PATH: com/smarsh
+      BUILD_DIRECTORY: ../app-build
+      CF_API: https://api.sys.gov.smarsh.cloud
+      CF_APP: tsfa
+      CF_MANIFEST: test.yml
+      CF_ORG: smarsh
+      CF_PASSWORD: ((cf-password))
+      CF_SPACE: cc-test
+      CF_USER: ((cf-username))
+      CF_ENV: aws-gov
+      PACKAGE_EXTENSION: federal.war
+    image: task-image
+
+- name: deploy-app-job-transformer-api-prod
+  serial_groups:
+  - deployment
+  max_in_flight: 1
+  plan:
+  - in_parallel:
+    - get: git-app-task
+    - get: git-app
+    - get: version
+    - get: task-image
+    - get: app-build
+      passed:
+      - yucca-test-regression
+      resource: artifactory
+    - get: git-app-pipeline
+  - task: acl-upload-to-s3
+    file: git-app-task/tasks/acl-upload-to-s3/task.yml
+    params:
+      ACL_APP_PACKAGE_FILENAME: transformer-api
+      ARTIFACTORY_PATH: com/smarsh
+      BUILD_DIRECTORY: ../app-build
+      PACKAGE_EXTENSION: .zip
+    image: task-image
+    on_success:
+      put: acl-upload-prod
+      params:
+        file: s3-folder-out/*-LATEST.zip
+  - task: blue-green-deploy
+    file: git-app-task/tasks/blue-green-deployment/task.yml
+    params:
+      APP_PACKAGE_FILENAME: transformer-api-service
+      ARTIFACTORY_PATH: com/smarsh
+      BUILD_DIRECTORY: ../app-build
+      CF_API: https://api.sys.gov.smarsh.cloud
+      CF_APP: tsfa
+      CF_DOMAIN: cc.gov.smarsh.cloud
+      CF_HOSTNAME: tsfa
+      CF_MANIFEST: prod.yml
+      CF_ORG: smarsh
+      CF_PASSWORD: ((cf-password))
+      CF_SPACE: cc-prod
+      CF_USER: ((cf-username))
+      CF_ENV: aws-gov
+      PACKAGE_EXTENSION: federal.war
+    image: task-image
+
+- name: hotfix-prod
+  max_in_flight: 1
+  plan:
+  - in_parallel:
+    - get: git-app-hotfix
+      trigger: true
+    - get: app-image
+    - get: git-app-pipeline
+    - get: git-app-task
+  - task: hotfix
+    file: git-app-task/tasks/hotfix/task.yml
+    params:
+      app_name: tsfa
+      app_package_filename: transformer-api-service
+      app_path: https://tsfa.cc.gov.smarsh.cloud
+      cf_api: ((cf-api))
+      cf_app: tsfa
+      cf_buildpack: https://github.com/cloudfoundry/java-buildpack.git#v4.16.1
+      cf_domain: ((cf-domain))
+      cf_hostname: tsfa
+      cf_manifest: ./ci/config/app-manifests/aws-gov/manifest.yml
+      cf_manifest_ops_file: ./ci/config/app-manifests/aws-gov/prod.yml
+      cf_org: ((cf-org))
+      cf_password: ((cf-password))
+      cf_space: cc-prod
+      cf_user: ((cf-username))
+      package_extension: federal.war
+    image: app-image
+
+- name: yucca-smoke
+  max_in_flight: 1
+  plan:
+  - in_parallel:
+    - get: yucca-source
+    - get: yucca-image
+    - get: app-build
+      passed:
+      - deploy-app-job-transformer-api-test
+      trigger: true
+      resource: artifactory
+    - get: git-app-pipeline
+  - task: environment-setup
+    config:
+      platform: linux
+      inputs:
+      - name: yucca-source
+      outputs:
+      - name: properties
+      run:
+        path: bash
+        args:
+        - scripts/envSetup.sh
+        - properties
+        dir: yucca-source
+    image: yucca-image
+    params:
+      cf_password: ((cf-password))
+      cf_user: ((cf-username))
+      certificate: ((gov-dev-superuser-cert))
+      cf_space: cc-test
+  - task: functional-smoke-test-suite
+    config:
+      platform: linux
+      run:
+        path: bash
+        args:
+        - scripts/task.sh
+        - properties
+        dir: yucca-source
+      inputs:
+      - name: yucca-source
+      - name: properties
+    params:
+      gov_aws_access_key_value: ((aws-access-key))
+      gov_aws_secret_access_key_value: ((aws-secret-key))
+      prod_aws_access_key_value: ((aws-prod-access-key))
+      prod_aws_secret_access_key_value: ((aws-prod-secret-key))
+      relative_suitefile_path: config/components/smoke/TransformerAPI.xml
+      target_env: gov-test
+      skip: false
+    image: yucca-image
+
+- name: yucca-test-regression
+  max_in_flight: 1
+  plan:
+  - in_parallel:
+    - get: yucca-source
+    - get: yucca-image
+    - get: app-build
+      passed:
+      - yucca-smoke
+      trigger: true
+      resource: artifactory
+    - get: git-app-pipeline
+  - task: environment-setup
+    config:
+      platform: linux
+      inputs:
+      - name: yucca-source
+      outputs:
+      - name: properties
+      run:
+        path: bash
+        args:
+        - scripts/envSetup.sh
+        - properties
+        dir: yucca-source
+    image: yucca-image
+    params:
+      cf_password: ((cf-password))
+      cf_user: ((cf-username))
+      certificate: ((gov-test-superuser-cert))
+      cf_space: cc-test
+  - task: functional-regression-test-suite
+    config:
+      platform: linux
+      run:
+        path: bash
+        args:
+        - scripts/task.sh
+        - properties
+        dir: yucca-source
+      inputs:
+      - name: yucca-source
+      - name: properties
+    params:
+      gov_aws_access_key_value: ((aws-access-key))
+      gov_aws_secret_access_key_value: ((aws-secret-key))
+      prod_aws_access_key_value: ((aws-prod-access-key))
+      prod_aws_secret_access_key_value: ((aws-prod-secret-key))
+      relative_suitefile_path: config/components/regression/TransformerAPI.xml
+      skip: false
+      target_env: gov-test
+    image: yucca-image

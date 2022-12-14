@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.smarsh</groupId>
+    <artifactId>transformer-chat</artifactId>
+    <packaging>jar</packaging>
+    <version>5.01.0001-SNAPSHOT</version>
+
+    <parent>
+        <groupId>com.smarsh</groupId>
+        <artifactId>smarsh-parent</artifactId>
+        <version>5.0.RELEASE</version>
+    </parent>
+
+    <properties>
+        <slack-plugin.version>2.01.0066</slack-plugin.version>
+        <teams-transfomer-plugin.version>5.01.0848</teams-transfomer-plugin.version>
+        <zoom-transform-plugin.version>3.0.0228</zoom-transform-plugin.version>
+        <transformer-api.version>5.01.1155</transformer-api.version>
+        <core-rest-service.version>7.00.0218</core-rest-service.version>
+    </properties>
+
+
+    <dependencies>
+
+        <dependency>
+            <groupId>com.smarsh</groupId>
+            <artifactId>core-rest-service</artifactId>
+            <version>${core-rest-service.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.smarsh</groupId>
+            <artifactId>transformer-api-service</artifactId>
+            <version>${transformer-api.version}</version>
+            <classifier>commercial-classes</classifier>
+            <!--<exclusions>
+                <exclusion>
+                    <groupId>com.smarsh</groupId>
+                    <artifactId>core-rest-service</artifactId>
+                </exclusion>
+            </exclusions>-->
+        </dependency>
+        <dependency>
+            <groupId>com.smarsh</groupId>
+            <artifactId>slack-transformer-plugin</artifactId>
+            <version>${slack-plugin.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.smarsh</groupId>
+                    <artifactId>transformer-api-model</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.grpc</groupId>
+                    <artifactId>grpc-all</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>com.smarsh</groupId>
+            <artifactId>teams-transformer-plugin</artifactId>
+            <version>${teams-transfomer-plugin.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.smarsh</groupId>
+                    <artifactId>transformer-api-model</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.grpc</groupId>
+                    <artifactId>grpc-all</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>com.smarsh</groupId>
+            <artifactId>zoom-transform-plugin</artifactId>
+            <version>${zoom-transform-plugin.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.smarsh</groupId>
+                    <artifactId>transformer-api-model</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.grpc</groupId>
+                    <artifactId>grpc-all</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <classifier>${classifier}</classifier>
+                    <mainClass>com.smarsh.transformer.api.TransformerApiApplication</mainClass>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-source-plugin</artifactId>
+                <configuration>
+                    <classifier>${classifier}-sources</classifier>
+                </configuration>
+            </plugin>
+            <plugin>
+                <artifactId>maven-jar-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>classes</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                        <configuration>
+                            <classifier>${classifier}-classes</classifier>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>jar-for-repackage-by-spring</id>
+                        <phase>repackage</phase>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                        <configuration>
+                            <classifier>${classifier}</classifier>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

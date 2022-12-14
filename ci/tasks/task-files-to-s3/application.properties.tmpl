@@ -1,0 +1,21 @@
+artifacts.source=manual-artifacts.json
+
+acl.upload.artifactRepositoryName=acl-matrix-local
+acl.upload.artifactoryUrl=https://smarsh.jfrog.io/smarsh
+#acl.upload.user=
+#acl.upload.password=
+
+## AWS S3 credentials (optional, DefaultAWSCredentialsProviderChain is used by default)
+
+acl.upload.s3.accessKey=ACCESS_KEY
+acl.upload.s3.secretKey=SECRET_KEY
+# if STS is used
+#acl.upload.s3.sessionToken=
+acl.upload.user=ACL_USER
+acl.upload.password=ACL_PASSWORD
+
+acl.upload.s3.bucket.awsRegion=AWS_REGION
+acl.upload.s3.bucket.name=BUCKET_SPACE
+
+# add the following property to upload to specific folder
+acl.upload.s3.bucket.folder=BUCKET_FOLDER

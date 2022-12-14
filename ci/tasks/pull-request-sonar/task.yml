@@ -1,0 +1,18 @@
+---
+platform: linux
+inputs:
+  - name: git-app-target
+  - name: git-app-pipeline
+  - name: pull-request
+
+params:
+  SONAR_URL:
+  SONAR_PROJECT_KEY:
+  SONAR_PROJECT_NAME:
+  SONAR_TOKEN:
+  GITHUB_REPOSITORY:
+  GITHUB_ACCESS_TOKEN:
+
+run:
+  dir: git-app-target
+  path: ../git-app-pipeline/ci/tasks/pull-request-sonar/task.sh

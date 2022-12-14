@@ -1,0 +1,24 @@
+---
+platform: linux
+inputs:
+  -  name: app-build
+  -  name: git-app-pipeline
+
+params:
+    APP_PACKAGE_FILENAME:
+    ARTIFACTORY_PATH:
+    BUILD_DIRECTORY:
+    CF_API:
+    CF_APP:
+    CF_MANIFEST:
+    CF_ORG:
+    CF_PASSWORD:
+    CF_SPACE:
+    CF_USER:
+    CF_ENV:
+    PACKAGE_EXTENSION:
+
+run:
+  dir: git-app-pipeline
+  path: ci/tasks/blue-green-deployment/task.sh
+  

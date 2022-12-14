@@ -1,0 +1,20 @@
+---
+platform: linux
+
+inputs:
+  - name: git-app-pipeline
+
+params:
+  CF_API:
+  CF_USER:
+  CF_PASSWORD:
+  CF_ORG:
+  CF_SPACE:
+  CF_APP:
+  CF_ENV:
+  MANIFEST:
+  ENABLE_AUTOSCALE:
+
+run:
+  dir: git-app-pipeline
+  path: ci/tasks/apply-autoscaler/task.sh

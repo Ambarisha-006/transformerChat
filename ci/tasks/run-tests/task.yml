@@ -1,0 +1,12 @@
+---
+platform: linux
+inputs:
+  - name: git-app
+  - name: git-app-pipeline
+
+outputs:
+  - name: git-app-target
+
+run:
+  dir: git-app
+  path: ../git-app-pipeline/ci/tasks/run-tests/task.sh

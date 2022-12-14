@@ -1,0 +1,18 @@
+---
+platform: linux
+
+inputs:
+  - name: git-app-pipeline
+
+params:
+  GIT_PRIVATE_KEY:
+  CONCOURSE_URL:
+  CONCOURSE_TEAM:
+  CONCOURSE_USERNAME:
+  CONCOURSE_PASSWORD:
+  CC_ENV:
+  PIPELINE_NAME:
+  PIPELINE_PATH:
+
+run:
+  path: git-app-pipeline/ci/tasks/set-pipeline/task.sh

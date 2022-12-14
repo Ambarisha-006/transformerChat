@@ -1,0 +1,19 @@
+---
+platform: linux
+inputs:
+  -  name: git-app 
+  -  name: git-app-latest 
+  -  name: version 
+  -  name: git-app-pipeline
+  -  name: app-build
+
+outputs:
+  -  name: git-app-latest-out
+
+params:
+  cf_app:
+  cf_space:
+
+run:
+  dir: git-app
+  path: ../git-app-pipeline/ci/tasks/tag-build-info/task.sh

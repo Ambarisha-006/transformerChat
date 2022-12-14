@@ -1,0 +1,22 @@
+---
+platform: linux
+inputs:
+  -  name: git-app-pipeline 
+
+params:
+  app_url:
+  cf_api:
+  cf_user:
+  cf_password:
+  cf_org:
+  cf_space:
+  cf_app:
+  cf_hostname:
+  app_path:
+  app_name:
+  pipeline_health_check_enabled:
+
+run:
+  dir: git-app-pipeline
+  path: ci/tasks/check-deployment/task.sh
+  args: []

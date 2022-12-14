@@ -1,0 +1,19 @@
+---
+platform: linux
+inputs:
+  - name: file-repository
+  - name: git-app-pipeline
+
+params:
+  artifactory_username:
+  artifactory_password:
+  aws_access_key:
+  aws_secret_key:
+  aws_region:
+  artifactory_sub_directory:
+  s3_bucket_deployments_space:
+  s3_folder:
+
+run:
+  dir: git-app-pipeline
+  path: ci/tasks/task-files-to-s3/task.sh

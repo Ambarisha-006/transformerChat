@@ -1,0 +1,18 @@
+---
+platform: linux
+inputs:
+  - name: git-app
+  - name: version
+  - name: git-app-pipeline
+
+outputs:
+  - name: build-package-output
+
+params:
+  artifactory_path:
+  artifactory_directory:
+  artifactory_sub_directory:
+
+run:
+  dir: git-app
+  path: ../git-app-pipeline/ci/tasks/run-acl-build/task.sh

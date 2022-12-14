@@ -1,0 +1,60 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:9411
+  zipkin:
+  hostmetrics:
+    collection_interval: 30s
+    scrapers:
+      cpu:
+      disk:
+      load:
+      memory:
+      network:
+      process:
+
+exporters:
+  datadog/api:
+    env: us-east-1-space_name
+    service: app_name
+    tags:
+      - segment:enterprise
+      - product_family:capture
+      - service:app_name
+      - application_name:app_name
+      - product:cloud_capture
+      - feature:capture
+      - customer:multicustomer
+      - tier:space_name
+      - cloud_provider:aws
+      - cloud_region:us-east-1
+      - service_region:virginia
+      - service_team:engineering
+      - component:application
+      - foundation:us-east-1
+      - entity:multicustomer-virginia
+      - namespace:cloud-capture-space_name
+      - environment:multicustomer-virginia-cloud-capture-space_name
+    api:
+      key: datadog_key
+
+processors:
+  batch:
+
+extensions:
+  health_check:
+  pprof:
+  zpages:
+
+service:
+  extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      exporters: [datadog/api]
+      processors: [batch]
+    metrics:
+      receivers: [otlp, hostmetrics]
+      exporters: [datadog/api]
+      processors: [batch]

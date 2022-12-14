@@ -1,0 +1,63 @@
+applications:
+  - name: tsfa-chat
+    disk_quota: 1G
+    env:
+      JAVA_OPTS: -javaagent:/app/WEB-INF/lib/opentelemetry-javaagent-1.2.0.jar -Dsun.net.client.defaultReadTimeout=180000 -Dlog4j2.formatMsgNoLookups=true
+      failedItems.maxLimit: 1000
+      JBP_CONFIG_SPRING_AUTO_RECONFIGURATION: '{enabled: false}'
+      SPRING_PROFILES_ACTIVE: cloud
+      SPRING_PROFILES_INCLUDE: commercial
+      transformer.content.stream.bufferContentSize: 6291456
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://localhost:9411
+      OTEL_RESOURCE_ATTRIBUTES: service.name=tsfa-chat
+      monitoring.tags.segment: enterprise
+      monitoring.tags.product_family: capture
+      monitoring.tags.service: tsfa-chat
+      monitoring.tags.application_name: tsfa-chat
+      monitoring.tags.product: cloud_capture
+      monitoring.tags.feature: capture
+      monitoring.tags.customer: multicustomer
+      monitoring.tags.tier: prod
+      monitoring.tags.cloud_provider: aws
+      monitoring.tags.cloud_region: us-east-1
+      monitoring.tags.service_region: virginia
+      monitoring.tags.component: application
+      monitoring.tags.foundation: aws-us-east-1
+      monitoring.tags.entity: multicustomer-virginia
+      monitoring.tags.namespace: cloud_capture-prod
+      monitoring.tags.environment: multicustomer-virginia-cloud_capture-prod
+      management.metrics.export.datadog.api-key: datadog_api_key
+      OTEL_INSTRUMENTATION_RABBITMQ_ENABLED: false
+      OTEL_INSTRUMENTATION_GRPC_ENABLED: false
+      OTEL_INSTRUMENTATION_TOMCAT_ENABLED: false
+      OTEL_INSTRUMENTATION_AWS-SDK_ENABLED: false
+      OTEL_INSTRUMENTATION_MONGO_ENABLED: false
+      OTEL_INSTRUMENTATION_EXTERNAL_ANNOTATIONS_ENABLED: false
+      OTEL_INSTRUMENTATION_JMS_ENABLED: false
+      OTEL_INSTRUMENTATION_JDBC_ENABLED: false
+      spring.application.name: tsfa-chat
+      management.health.redis.enabled: false
+      transformer.broker.queueName: transform-chat
+      transformer.broker.errorQueueName: transform-chat-error
+      transformer.broker.threadCount: 50
+      eureka.instance.appname: tsfa-chat
+      eureka.client.enabled: true
+    instances: 4
+    memory: 4G
+    routes:
+      - route: tsfa-chat.cc.smarsh.cloud
+    services:
+      - vault
+      - aws-sqs-service
+      - aws-s3-capture-service
+      - eureka
+      - syslog-logstash
+      - rmq_cluster_medium
+      - cc-autoscaler
+      - pcc
+    timeout: 180
+    sidecars:
+      - name: otel
+        process_types: [ 'web']
+        command: '/app/otel/otelcontribcol_linux_amd64 --config=/app/otel/otel-collector-config.yml'
+        memory: 256MB # allocate 1/4 of the total app memory for the sidecar

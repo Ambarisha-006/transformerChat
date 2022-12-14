@@ -1,0 +1,17 @@
+---
+platform: linux
+inputs:
+  -  name: git-app-pipeline 
+  -  name: version 
+  -  name: git-app-latest 
+  -  name: app-build 
+
+outputs:
+  -  name: s3-app-deployments 
+
+params:
+  cf_space:
+
+run:
+  dir: git-app-latest
+  path: ../git-app-pipeline/ci/tasks/store-deployment-timestamp/task.sh

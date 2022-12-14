@@ -1,0 +1,22 @@
+---
+platform: linux
+inputs:
+  -  name: git-app-pipeline 
+
+params:
+  datadog-deployments-metric-name:
+  datadog-version-metric-name:
+  datadog-build-metric-name:
+  datadog-api-key-metrics:
+  environment:
+  concourse-host:
+  cf_space:
+  cf_app:
+  s3_bucket_deployments:
+  s3_access_key_id:
+  s3_secret_access_key:
+  aws_region:
+
+run:
+  dir: git-app-pipeline
+  path: ci/tasks/datadog-deployment-counter/task.sh

@@ -1,0 +1,705 @@
+groups:
+- jobs:  
+  - deploy-app-job-transformer-api-perf
+  - deploy-app-job-transformer-api-prod  
+  - check-transformer-api-perf-deployment
+  - check-transformer-api-prod-deployment  
+  - store-deployment-timestamp-perf
+  - tag-deployment-releaseinfo-perf
+  - datadog-deployment-counter-perf
+  - store-deployment-timestamp-prod
+  - datadog-deployment-counter-prod  
+  - set-pipeline
+  name: all
+
+- jobs:  
+  - deploy-app-job-transformer-api-perf
+  - deploy-app-job-transformer-api-prod  
+  - check-transformer-api-perf-deployment
+  - check-transformer-api-prod-deployment 
+  - store-deployment-timestamp-perf
+  - tag-deployment-releaseinfo-perf
+  - datadog-deployment-counter-perf
+  - store-deployment-timestamp-prod
+  - datadog-deployment-counter-prod 
+  name: deploy
+
+- jobs:
+  - store-deployment-timestamp-perf
+  - tag-deployment-releaseinfo-perf
+  - datadog-deployment-counter-perf
+  - check-transformer-api-perf-deployment
+  - deploy-app-job-transformer-api-perf
+  - stamp_build_no
+  name: cc-perf
+
+- jobs:
+  - store-deployment-timestamp-prod
+  - datadog-deployment-counter-prod
+  - check-transformer-api-prod-deployment
+  - deploy-app-job-transformer-api-prod
+  - setup-autoscaler-rules-prod
+  name: cc-prod
+
+anchors:
+  cc-delivery-versions_source: &cc-delivery-versions_source
+    branch: aws-prod-cc-perf
+    private_key: ((git-private-key))
+    uri: git@github.com:Smarsh/cc-delivery-versions.git
+  
+  cc-delivery-versions_source_perf: &cc-delivery-versions_source_perf
+    branch: aws-us-west-2-cc-perf
+    private_key: ((git-private-key))
+    uri: git@github.com:Smarsh/cc-delivery-versions.git
+
+resource_types:
+- name: sleuth-deployment-resource
+  type: registry-image
+  source:
+    repository: smarshops/delivery-sleuth-deployment-resource
+    username: ((docker-hub-username))
+    password: ((docker-hub-password))
+    tag: latest
+
+- name: artifactory-resource
+  source:
+    repository: smarshops/artifactory-resource
+    tag: latest
+  type: registry-image
+
+- name: slack-notification
+  source:
+    repository: cfcommunity/slack-notification-resource
+    tag: latest
+  type: registry-image
+
+- name: cf-cli-resource
+  source:
+    repository: smarshops/cf-cli-resource
+    tag: latest
+  type: registry-image
+
+resources:
+- name: sleuth-deployment
+  type: sleuth-deployment-resource
+
+- name: cc-delivery-versions-source
+  type: git
+  source:
+    <<: *cc-delivery-versions_source
+
+- name: cc-delivery-versions-target-perf
+  type: git
+  source:
+    <<: *cc-delivery-versions_source_perf
+
+- name: cc-delivery-versions-target
+  type: git
+  source:
+    <<: *cc-delivery-versions_source
+
+- name: 1h
+  source:
+    interval: 1h
+  type: time
+
+- name: app-image
+  source:
+    repository: smarshops/cc-task-image
+    tag: latest
+  type: registry-image
+
+- name: artifactory-release
+  source:
+    username: ((artifactory-username))
+    password: ((artifactory-password))
+    uri: https://smarsh.jfrog.io/smarsh
+    repo_name: cc-maven-release-local
+    build_name: transformer-api-build-comm
+  version:
+    build_number: ((tsfa_build_no))
+  type: artifactory-resource   
+
+- name: git-app
+  source:
+    branch: main
+    ignore_paths:
+    - '*-database/*'
+    - manifest_db.yml
+    - version
+    - ci/*
+    private_key: ((git-private-key))
+    uri: git@github.com:Smarsh/transformerApi.git
+  type: git
+
+- name: git-app-ccdelivery
+  type: git
+  source:
+    branch: master
+    paths:
+    - ci/*
+    private_key: ((git-private-key))
+    uri: git@github.com:Smarsh/ccdelivery.git
+
+- name: opentelemetry
+  source:
+    access_key_id: ((ea_pipeline_assets_user.access_key_id))
+    bucket: smarsh-ea-pipeline-assets
+    regexp: otelcontribcol_(linux_amd64).zip
+    secret_access_key: ((ea_pipeline_assets_user.secret_access_key))
+  type: s3
+
+- name: git-app-latest
+  source:
+    branch: main
+    private_key: ((git-private-key))
+    uri: git@github.com:Smarsh/transformerApi.git
+  type: git
+
+- name: git-app-pipeline
+  source:
+    branch: main
+    paths:
+    - ci/*
+    private_key: ((git-private-key))
+    uri: git@github.com:Smarsh/transformerApi.git
+  type: git
+
+- name: s3-deployments-perf
+  source:
+    access_key_id: ((s3-access-key-id))
+    bucket: smarsh-connected-perf
+    regexp: tsfa/cc-perf(.*)_(?P<version>.*).txt
+    region_name: us-east-1
+    secret_access_key: ((s3-secret-access-key))
+  type: s3
+
+- name: s3-deployments-prod
+  source:
+    access_key_id: ((s3-access-key-id))
+    bucket: smarsh-connected-prod
+    regexp: tsfa/cc-prod(.*)_(?P<version>.*).txt
+    region_name: us-east-1
+    secret_access_key: ((s3-secret-access-key))
+  type: s3
+
+- name: slack-alert
+  source:
+    url: ((slack-webhook-url))
+  type: slack-notification
+
+- name: task-image
+  source:
+    repository: smarshops/maven-cc
+  type: registry-image
+
+- name: delivery-ci-cf-image
+  source:
+    repository: smarshops/delivery-ci-cf
+  type: registry-image
+
+- name: version
+  source:
+    branch: version
+    driver: git
+    file: version
+    private_key: ((git-private-key))
+    uri: git@github.com:Smarsh/transformerApi.git
+  type: semver
+
+- name: cc-pcf-org
+  type: cf-cli-resource
+  source:
+    api: https://api.sys.prod.smarsh.cloud
+    org: smarsh
+    password: ((cf-password))
+    skip_cert_check: true
+    username: ((cf-username))
+
+jobs:
+- name: set-pipeline
+  serial: true
+  plan:
+    - get: git-app-pipeline
+      trigger: true
+    - get: cc-delivery-versions-target-perf
+      trigger: true
+    - set_pipeline: transformerApi-prod-deploy-pipeline
+      file: git-app-pipeline/ci/config/pipelines/aws-prod/deploy-pipeline-prod.yml
+      var_files:
+      - cc-delivery-versions-target-perf/tsfa.yml
+
+- name: store-deployment-timestamp-prod
+  max_in_flight: 1
+  plan:
+  - in_parallel:
+      steps:
+      - get: git-app-latest
+      - get: version
+        passed:
+        - deploy-app-job-transformer-api-prod
+        trigger: true
+      - get: app-image
+      - get: git-app-ccdelivery
+      - get: app-build
+        params:
+          save_build_info: true
+        passed:
+        - deploy-app-job-transformer-api-prod
+        resource: artifactory-release
+  - file: git-app-ccdelivery/ci/tasks/store-deployment-timestamp/task.yml
+    image: app-image
+    params:
+      cf_space: cc-prod
+    task: store-deployment-timestamp
+  - params:
+      file: s3-app-deployments/*.txt
+    put: s3-deployments-prod
+
+- name: datadog-deployment-counter-prod
+  build_logs_to_retain: 5
+  plan:
+  - in_parallel:
+      steps:
+      - get: 1h
+        trigger: true
+      - get: task-image
+      - get: s3-deployments-prod
+        passed:
+        - store-deployment-timestamp-prod
+        trigger: true
+      - get: git-app-ccdelivery
+  - file: git-app-ccdelivery/ci/tasks/datadog-deployment-counter/task.yml
+    image: task-image
+    params:
+      aws_region: us-east-1
+      cf_app: tsfa
+      cf_space: cc-prod
+      concourse-host: ((concourse_server))
+      datadog-api-key-metrics: ((datadog-api-key-metrics))
+      datadog-build-metric-name: concourse.deploy.build_number
+      datadog-deployments-metric-name: concourse.deploy.deployments_counter
+      datadog-version-metric-name: concourse.deploy.version_number
+      environment: commercial
+      s3_access_key_id: ((s3-access-key-id))
+      s3_bucket_deployments: smarsh-connected-prod
+      s3_secret_access_key: ((s3-secret-access-key))
+    task: datadog-deployment-counter
+
+- name: deploy-app-job-transformer-api-prod
+  max_in_flight: 1
+  plan:
+  - in_parallel:
+      steps:
+      - get: git-app-latest
+      - get: git-app
+      - get: version
+      - get: task-image
+      - get: delivery-ci-cf-image
+      - get: opentelemetry
+      - get: app-build
+        params:
+          save_build_info: true
+        passed:
+        - check-transformer-api-perf-deployment
+        resource: artifactory-release
+      - get: git-app-pipeline
+      - get: git-app-ccdelivery
+  - task: acl-upload-to-crtm
+    file: git-app-ccdelivery/ci/tasks/acl-upload-to-crtm/task.yml
+    params:
+      ACL_APP_PACKAGE_FILENAME: transformer-api
+      ARTIFACTORY_PATH: com/smarsh
+      BUILD_DIRECTORY: ../app-build
+      PACKAGE_EXTENSION: .zip
+      ACL_UPLOAD_PATH: actors/transformer-api/acl
+      CRTM_APP_URL: https://crtm.cc.smarsh.cloud/
+      CRTM_AUTH_TOKEN: ((crtm-auth-token-prod))
+    image: task-image
+  - task: sleuth-commitshash
+    image: delivery-ci-cf-image
+    file: git-app-ccdelivery/ci/tasks/get_commits_hash/task.yml
+  - task: cf-push-rolling-deployment
+    file: git-app-ccdelivery/ci/tasks/cf-push-rolling-deployment/task.yml
+    params:
+      APP_PACKAGE_FILENAME: transformer-api-service
+      ARTIFACTORY_PATH: com/smarsh
+      BUILD_DIRECTORY: ../app-build
+      CF_API: https://api.sys.prod.smarsh.cloud
+      CF_APP: tsfa
+      CF_MANIFEST: prod.yml
+      CF_ORG: smarsh
+      CF_PASSWORD: ((cf-password))
+      CF_SPACE: cc-prod
+      CF_USER: ((cf-username))
+      CF_ENV: aws-prod
+      PACKAGE_EXTENSION: commercial.war
+      NEWRELIC_APIKEY: ((new-relic-api-key))
+      NEWRELIC_ACCOUNTID: ((new-relic-account-id))
+      INCLUDE_SIDECAR: include
+      OPENTELEMETRY_DATADOG_APIKEY: ((opentelemetry_datadog_apikey))
+    image: delivery-ci-cf-image
+    on_failure:
+      params:
+        always_notify: true
+        channel: '#connected_capture-ops'
+        icon_emoji: ':exclamation:'
+        text: |
+          Deploy to https://tsfa.cc.smarsh.cloud failed
+          More details: https://((concourse_server))/builds/$BUILD_ID
+      put: slack-alert
+    on_success:
+      do:
+        - load_var: commitsha_tsfa
+          file: commits_hash/sha.txt
+          on_success:
+            do:
+              - put: sleuth-deployment
+                params:
+                  api_key: ((sleuth_api_key))
+                  environment: mt_us_east1_prod
+                  sha1: ((.:commitsha_tsfa))
+                  repo_name: tsfa
+        - put: slack-alert
+          params:
+            always_notify: true
+            channel: '#connected_capture-ops'
+            icon_emoji: ':ship:'
+            text: |
+              Successfully deployed to https://tsfa.cc.smarsh.cloud
+              More details: https://((concourse_server))/builds/$BUILD_ID
+        - task: calculcate-golden-metrics
+          file: git-app-ccdelivery/ci/tasks/calculate-golden-signals/task.yml
+          params:
+             CF_APP: tsfa   
+             CF_ENV: useast1
+             DD_CLIENT_API_KEY: ((DD_API_KEY))
+             GITHUB_ACCESS_TOKEN: ((github_access_token))
+             GITHUB_ACCESS_USER: ((github_access_user))
+             REPONAME: smarsh/transformerApi
+  serial_groups:
+  - deployment
+
+- name: check-transformer-api-prod-deployment
+  plan:
+  - in_parallel:
+      steps:
+      - get: task-image
+      - get: artifactory-release
+        passed:
+        - deploy-app-job-transformer-api-prod
+        trigger: true
+      - get: git-app-ccdelivery
+  - file: git-app-ccdelivery/ci/tasks/check-deployment/task.yml
+    image: task-image
+    on_failure:
+      params:
+        always_notify: true
+        channel: '#connected_capture-ops'
+        icon_emoji: ':exclamation:'
+        text: |
+          Deploy to https://tsfa.cc.smarsh.cloud failed
+          More details: https://((concourse_server))/builds/$BUILD_ID
+      put: slack-alert
+    on_success:
+      params:
+        always_notify: true
+        channel: '#connected_capture-ops'
+        icon_emoji: ':ship:'
+        text: |
+          Health-Check for https://tsfa.cc.smarsh.cloud failed
+          More details: https://((concourse_server))/builds/$BUILD_ID
+      put: slack-alert
+    params:
+      app_path: manage/health
+      app_url: https://tsfa.cc.smarsh.cloud
+      cf_api: https://api.sys.prod.smarsh.cloud
+      cf_app: tsfa
+      cf_hostname: tsfa
+      cf_org: smarsh
+      cf_password: ((cf-password))
+      cf_space: cc-prod
+      cf_user: ((cf-username))
+      pipeline_health_check_enabled: true
+    task: curl
+
+- name: deploy-app-job-transformer-api-perf
+  max_in_flight: 1
+  plan:
+  - in_parallel:
+      steps:
+      - get: git-app-latest
+      - get: git-app
+      - get: version
+      - get: task-image
+      - get: delivery-ci-cf-image
+      - get: opentelemetry
+      - get: app-build
+        params:
+          save_build_info: true
+        resource: artifactory-release
+      - get: git-app-pipeline
+      - get: git-app-ccdelivery
+  - task: acl-upload-to-crtm
+    file: git-app-ccdelivery/ci/tasks/acl-upload-to-crtm/task.yml
+    params:
+      ACL_APP_PACKAGE_FILENAME: transformer-api
+      ARTIFACTORY_PATH: com/smarsh
+      BUILD_DIRECTORY: ../app-build
+      PACKAGE_EXTENSION: .zip
+      ACL_UPLOAD_PATH: actors/transformer-api/acl
+      CRTM_APP_URL: https://crtm-perf.cc.smarsh.cloud/
+      CRTM_AUTH_TOKEN: ((crtm-auth-token-perf))
+    image: task-image
+  - task: cf-push-rolling-deployment
+    file: git-app-ccdelivery/ci/tasks/cf-push-rolling-deployment/task.yml
+    params:
+      APP_PACKAGE_FILENAME: transformer-api-service
+      ARTIFACTORY_PATH: com/smarsh
+      BUILD_DIRECTORY: ../app-build
+      CF_API: https://api.sys.prod.smarsh.cloud
+      CF_APP: tsfa
+      CF_MANIFEST: perf.yml
+      CF_ORG: smarsh
+      CF_PASSWORD: ((cf-password))
+      CF_SPACE: cc-perf
+      CF_USER: ((cf-username))
+      CF_ENV: aws-prod
+      PACKAGE_EXTENSION: commercial.war
+      NEWRELIC_APIKEY: ((new-relic-api-key))
+      NEWRELIC_ACCOUNTID: ((new-relic-account-id))
+      INCLUDE_SIDECAR: include
+      OPENTELEMETRY_DATADOG_APIKEY: ((opentelemetry_datadog_apikey))
+    image: delivery-ci-cf-image
+    on_failure:
+      params:
+        always_notify: true
+        channel: '#connected_capture-ops'
+        icon_emoji: ':exclamation:'
+        text: |
+          Deploy to https://tsfa-perf.cc.smarsh.cloud failed
+          More details: https://((concourse_server))/builds/$BUILD_ID
+      put: slack-alert
+    on_success:
+      params:
+        always_notify: true
+        channel: '#connected_capture-ops'
+        icon_emoji: ':ship:'
+        text: |
+          Successfully deployed to https://tsfa-perf.cc.smarsh.cloud
+          More details: https://((concourse_server))/builds/$BUILD_ID
+      put: slack-alert
+  serial_groups:
+  - deployment
+
+- name: store-deployment-timestamp-perf
+  max_in_flight: 1
+  plan:
+  - in_parallel:
+      steps:
+      - get: git-app-latest
+      - get: version
+        passed:
+        - deploy-app-job-transformer-api-perf
+        trigger: true
+      - get: app-image
+      - get: git-app-ccdelivery
+      - get: app-build
+        params:
+          save_build_info: true
+        passed:
+        - deploy-app-job-transformer-api-perf
+        resource: artifactory-release
+  - file: git-app-ccdelivery/ci/tasks/store-deployment-timestamp/task.yml
+    image: app-image
+    params:
+      cf_space: cc-perf
+    task: store-deployment-timestamp
+  - params:
+      file: s3-app-deployments/*.txt
+    put: s3-deployments-perf
+
+- name: tag-deployment-releaseinfo-perf
+  max_in_flight: 1
+  plan:
+  - in_parallel:
+      steps:
+      - get: git-app-latest
+      - get: git-app
+      - get: version
+        passed:
+        - deploy-app-job-transformer-api-perf
+      - get: app-image
+      - get: git-app-ccdelivery
+      - get: app-build
+        params:
+          save_build_info: true
+        passed:
+        - deploy-app-job-transformer-api-perf
+        resource: artifactory-release
+        trigger: true
+  - task: tag-deployment-releaseinfo
+    file: git-app-ccdelivery/ci/tasks/tag-build-info/task.yml
+    image: app-image
+    on_success: 
+     put: git-app-latest
+     params: 
+      repository: git-app-latest-out
+      only_tag: true
+    params:
+      cf_app: tsfa
+      cf_space: cc-perf
+
+- name: stamp_build_no
+  max_in_flight: 1
+  plan:
+  - in_parallel:
+      steps:
+      - get: git-app-ccdelivery
+      - get: cc-delivery-versions-target
+      - get: cc-delivery-versions-source
+      - get: app-build
+        params:
+          save_build_info: true
+        passed:
+        - deploy-app-job-transformer-api-perf
+        resource: artifactory-release
+        trigger: true
+      - get: app-image
+  - task: stamp_build_no
+    file: git-app-ccdelivery/ci/tasks/stamp-build-no/task.yml
+    image: app-image
+    on_success: 
+     put: cc-delivery-versions-target
+     params: 
+      repository: cc-delivery-versions-source
+      merge: true
+    params:
+      cf_app: tsfa
+
+- name: datadog-deployment-counter-perf
+  build_logs_to_retain: 5
+  plan:
+  - in_parallel:
+      steps:
+      - get: 1h
+        trigger: true
+      - get: task-image
+      - get: s3-deployments-perf
+        passed:
+        - store-deployment-timestamp-perf
+        trigger: true
+      - get: git-app-ccdelivery
+  - file: git-app-ccdelivery/ci/tasks/datadog-deployment-counter/task.yml
+    image: task-image
+    params:
+      aws_region: us-east-1
+      cf_app: tsfa
+      cf_space: cc-perf
+      concourse-host: ((concourse_server))
+      datadog-api-key-metrics: ((datadog-api-key-metrics))
+      datadog-build-metric-name: concourse.deploy.build_number
+      datadog-deployments-metric-name: concourse.deploy.deployments_counter
+      datadog-version-metric-name: concourse.deploy.version_number
+      environment: commercial
+      s3_access_key_id: ((s3-access-key-id))
+      s3_bucket_deployments: smarsh-connected-perf
+      s3_secret_access_key: ((s3-secret-access-key))
+    task: datadog-deployment-counter
+- name: check-transformer-api-perf-deployment
+  plan:
+  - in_parallel:
+      steps:
+      - get: task-image
+      - get: artifactory-release
+        passed:
+        - deploy-app-job-transformer-api-perf
+        trigger: true
+      - get: git-app-ccdelivery
+  - file: git-app-ccdelivery/ci/tasks/check-deployment/task.yml
+    image: task-image
+    on_failure:
+      params:
+        always_notify: true
+        channel: '#connected_capture-ops'
+        icon_emoji: ':exclamation:'
+        text: |
+          Deploy to https://tsfa-perf.cc.smarsh.cloud failed
+          More details: https://((concourse_server))/builds/$BUILD_ID
+      put: slack-alert
+    on_success:
+      params:
+        always_notify: true
+        channel: '#connected_capture-ops'
+        icon_emoji: ':ship:'
+        text: |
+          Health-Check for https://tsfa-perf.cc.smarsh.cloud failed
+          More details: https://((concourse_server))/builds/$BUILD_ID
+      put: slack-alert
+    params:
+      app_path: manage/health
+      app_url: https://tsfa-perf.cc.smarsh.cloud
+      cf_api: https://api.sys.prod.smarsh.cloud
+      cf_app: tsfa
+      cf_hostname: tsfa-perf
+      cf_org: smarsh
+      cf_password: ((cf-password))
+      cf_space: cc-perf
+      cf_user: ((cf-username))
+      pipeline_health_check_enabled: true
+    task: curl
+
+- name: setup-autoscaler-rules-prod
+  max_in_flight: 1
+  plan:
+  - in_parallel:
+      steps:
+      - get: git-app-latest
+      - get: git-app
+      - get: app-build
+        passed:
+        - check-transformer-api-prod-deployment
+        resource: artifactory-release
+        trigger: true
+
+  - put: create-min-and-max-instances
+    attempts: 2
+    resource: cc-pcf-org
+    params:
+      commands:
+      - app_name: tsfa
+        command: update-autoscaling-limits
+        max_instance_limit: 6
+        min_instance_limit: 4
+        space: cc-prod
+    
+  - put: delete-autoscaling-rules
+    attempts: 2
+    resource: cc-pcf-org
+    params:
+      commands:
+      - app_name: tsfa
+        command: delete-autoscaling-rules
+        space: cc-prod
+
+  - put: create-autoscaling-rules-rabbitmq
+    attempts: 2
+    resource: cc-pcf-org
+    params:
+      commands:
+      - app_name: tsfa
+        command: create-autoscaling-rule
+        max_threshold: 50000
+        min_threshold: 25000
+        rule_type: rabbitmq
+        subtype: transform
+        space: cc-prod
+
+  - put: enable-autoscaler
+    attempts: 2
+    resource: cc-pcf-org
+    params:
+      commands:
+      - app_name: tsfa
+        command: enable-autoscaling
+        space: cc-prod

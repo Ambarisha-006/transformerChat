@@ -1,0 +1,54 @@
+applications:
+- name: tsfa-chat
+  disk_quota: 1G
+  env:
+    SPRING_PROFILES_INCLUDE: commercial
+    # OTEL_EXPORTER_OTLP_ENDPOINT: http://localhost:9411
+    # OTEL_RESOURCE_ATTRIBUTES: service.name=tsfa
+    # JAVA_OPTS: -javaagent:/app/WEB-INF/lib/opentelemetry-javaagent-1.2.0.jar -Dsun.net.client.defaultReadTimeout=180000
+    JBP_CONFIG_SPRING_AUTO_RECONFIGURATION: '{enabled: false}'
+    SPRING_PROFILES_ACTIVE: cloud
+    msteams.transformer.supportedJoinedSystemEvents: '#Microsoft.Teams.GraphSvc.membersAddedEventMessageDetail,#Microsoft.Teams.GraphSvc.teamsAppInstalledEventMessageDetail,#Microsoft.Teams.GraphSvc.membersJoinedEventMessageDetail,#Microsoft.Teams.GraphSvc.channelAddedEventMessageDetail,#Microsoft.Teams.GraphSvc.teamCreatedEventMessageDetail'
+    msteams.transformer.supportedLeaveSystemEvents: '#Microsoft.Teams.GraphSvc.membersLeftEventMessageDetail,#Microsoft.Teams.GraphSvc.membersDeletedEventMessageDetail,#Microsoft.Teams.GraphSvc.teamsAppRemovedEventMessageDetail'
+    monitoring.tags.segment: enterprise
+    monitoring.tags.product_family: capture
+    monitoring.tags.service: tsfa-chat
+    monitoring.tags.product: cloud_capture
+    monitoring.tags.feature: capture
+    monitoring.tags.customer: multicustomer
+    monitoring.tags.tier: test
+    monitoring.tags.cloud_provider: aws
+    monitoring.tags.cloud_region: us_west_2
+    monitoring.tags.service_region: oregon
+    monitoring.tags.component: application
+    monitoring.tags.foundation: aws-us_west_2
+    monitoring.tags.entity: multicustomer-oregon
+    monitoring.tags.namespace: cloud_capture-test
+    monitoring.tags.environment: multicustomer-oregon-cloud_capture-test
+    management.metrics.export.datadog.api-key: datadog_api_key
+    management.health.redis.enabled: false
+    transformer.broker.queueName: transform-chat
+    transformer.broker.errorQueueName: transform-chat-error
+    transformer.broker.threadCount: 50
+    eureka.instance.appname: tsfa-chat
+    eureka.client.enabled: true
+  instances: 1
+  memory: 2G
+  routes:
+  - route: tsfa-chat.cc.test.us-west-2.aws.smarsh.cloud
+  services:
+  - vault
+  - aws-sqs-service
+  - aws-s3-capture-service
+  - eureka
+  - app-log-drain
+  - rmq_cluster_medium
+  - cc-autoscaller
+  - pcc
+  timeout: 180
+  # sidecars:
+  # - name: otel
+    # process_types: [ 'web']
+    # command: '/app/otel/otelcontribcol_linux_amd64 --config=/app/otel/otel-collector-config.yml'
+    # memory: 256MB # allocate 1/4 of the total app memory for the sidecar
+    

@@ -1,0 +1,27 @@
+---
+platform: linux
+inputs:
+  -  name: git-app-hotfix 
+  -  name: git-app-pipeline 
+  -  name: app-image 
+
+params:
+  package_extension:
+  app_package_filename:
+  cf_domain:
+  cf_api:
+  cf_user:
+  cf_password:
+  cf_org:
+  cf_space:
+  cf_app:
+  cf_hostname:
+  cf_buildpack:
+  app_name:
+  cf_manifest:
+  app_path:
+  cf_manifest_ops_file:
+
+run:
+  dir: git-app-pipeline
+  path: ci/tasks/hotfix/task.sh
