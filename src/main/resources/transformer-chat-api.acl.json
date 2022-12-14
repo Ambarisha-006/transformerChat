@@ -1,0 +1,17 @@
+[{
+    "actor": "transformer-chat-api",
+    "endpoints": [
+        "retrieval-api | POST | /batches/{id}/failedItem",
+        "retrieval-api | PUT | /batches/{id}/status/failed",
+        "retrieval-api | POST | /batches/{id}/contents",
+        "retrieval-api | PUT | /batches/{id}/resources/status",
+        "retrieval-api | PUT | /batches/{id}/resources/{resourceId}/status/{status}",
+        "key-management-api | GET | /datakey",
+        "key-management-api | GET | /keypair/private,",
+        "provisioning-api | GET | /feeds/{feedId}",
+        "transformer-api | POST | /msteams/webhook/decrypt",
+        "retrieval-api | POST | /batches/{id}/contents/error",
+        "retrieval-api | POST | /batches/{id}/contents/{contentId}/items/{itemId}",
+        "retrieval-api | POST | /batches/{id}/contents/{contentId}/items/{itemId}/error"
+    ]
+}]
